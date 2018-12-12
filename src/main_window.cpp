@@ -187,8 +187,17 @@ MainWindow::MainWindow( Qt::WindowFlags wflags )
 
     logSaver = new YQSaveLogs();
 
-    setWinTitle();
-    statusBar()->showMessage( _("Ready") );
+    QStringList arguments;
+    arguments << "localhost" << "-m" << "setup";
+    QString program_stdout = runAnsible(arguments);
+    QJsonObject hostname_object = parseAnsible(program_stdout);
+    QString hostname_value = hostname_object["ansible_hostname"].toString();
+    setWinTitle(hostname_value);
+    //statusBar()->showMessage( _("Ready") );
+    QJsonArray cpu = hostname_object["ansible_processor"].toArray();
+    statusBar()->showMessage(cpu[2].toString());
+
+
     
     connect( d->groupview, SIGNAL( clicked( const QModelIndex & ) ),
              SLOT( slotGroupPressed( const QModelIndex & ) ) );
@@ -295,15 +304,15 @@ void MainWindow::slotLaunchModule( const QModelIndex &index)
     cmd += client;
 
     if ( d->noBorder )	
-	cmd += " --noborder ";
+        cmd += " --noborder ";
     if ( d->fullScreen )
-	cmd += " --fullscreen ";
+        cmd += " --fullscreen ";
 
     if (!argument.isEmpty() )
     {
-	cmd +=" '";
-	cmd += argument;
-	cmd +="'";
+        cmd +=" '";
+        cmd += argument;
+        cmd +="'";
     }
     cmd += " &";
 
@@ -402,15 +411,10 @@ void MainWindow::writeSettings()
 
 }
 
-void MainWindow::setWinTitle()
+void MainWindow::setWinTitle(QString hostname_value)
 {
     QString title = _("YaST Control Center");
     char hostname[ MAXHOSTNAMELEN+1 ];
-    QStringList arguments;
-    arguments << "localhost" << "-m" << "setup" << "-a" << "filter=*hostname";
-    QString program_stdout = runAnsible(arguments);
-    QJsonObject hostname_object = parseAnsible(program_stdout);
-    QString hostname_value = hostname_object["ansible_hostname"].toString();
     title += " @ " + hostname_value;
     setWindowTitle( title );
     QCoreApplication::setApplicationName( title );

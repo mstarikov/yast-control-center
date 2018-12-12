@@ -75,7 +75,7 @@ private:
 
   void writeSettings();
   void readSettings();
-  void setWinTitle();
+  void setWinTitle(QString hostname_value);
   QSize readGroupViewSize();
   QString runAnsible(QStringList arguments);
   QJsonObject parseAnsible(QString json_text);
