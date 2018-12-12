@@ -77,6 +77,8 @@ private:
   void readSettings();
   void setWinTitle();
   QSize readGroupViewSize();
+  QString runAnsible(QStringList arguments);
+  QJsonObject parseAnsible(QString json_text);
 
 
   QDockWidget *groupdock;

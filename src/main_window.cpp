@@ -288,6 +288,7 @@ void MainWindow::slotLaunchModule( const QModelIndex &index)
 
     QString client = d->modmodel->data( i1, Qt::UserRole ).toString();
     QString argument = d->modmodel->data( i2, Qt::UserRole ).toString();
+    qDebug() << argument;
     QString name = d->modmodel->data( i3, Qt::UserRole ).toString();
 
     QString cmd = QString("/sbin/yast2 ");
@@ -405,18 +406,41 @@ void MainWindow::setWinTitle()
 {
     QString title = _("YaST Control Center");
     char hostname[ MAXHOSTNAMELEN+1 ];
-    if ( gethostname( hostname, sizeof( hostname )-1 ) == 0 )
-    {
-	hostname[ sizeof( hostname ) -1 ] = '\0'; // make sure it's terminated
-
-	if ( strlen( hostname ) > 0 && strcmp( hostname, "(none)" ) != 0 )
-	{
-	    title += " @ ";
-	    title += hostname;
-	}
-    }
+    QStringList arguments;
+    arguments << "localhost" << "-m" << "setup" << "-a" << "filter=*hostname";
+    QString program_stdout = runAnsible(arguments);
+    QJsonObject hostname_object = parseAnsible(program_stdout);
+    QString hostname_value = hostname_object["ansible_hostname"].toString();
+    title += " @ " + hostname_value;
     setWindowTitle( title );
     QCoreApplication::setApplicationName( title );
+}
+
+QString MainWindow::runAnsible(QStringList arguments)
+{
+    //Prepare ansible Ad-Hoc command
+    QString program = "/usr/bin/ansible";
+    //Run ansible Ad-Hoc command and store output
+    QProcess runAnsible;
+    runAnsible.start(program, arguments);
+    runAnsible.waitForFinished();
+    //read result and trim top line(non JSON)
+    QString program_stdout = runAnsible.readAll();
+    return program_stdout.remove("localhost | SUCCESS =>");
+}
+
+QJsonObject MainWindow::parseAnsible(QString json_text)
+{
+    //Convert stdout to JSON
+    QJsonParseError jerror;
+    QJsonDocument facts = QJsonDocument::fromJson(json_text.toLatin1(), &jerror);
+    if (jerror.error != QJsonParseError::NoError)
+    {
+        qDebug() << "Error happened:" << jerror.errorString();
+    }
+    //Get object from Document & Unpack main ansible_facts section
+    QJsonObject facts_object = facts.object()["ansible_facts"].toObject();
+    return facts_object;
 }
 
 void MainWindow::closeEvent (QCloseEvent *event)
