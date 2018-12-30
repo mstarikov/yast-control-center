@@ -25,7 +25,7 @@
 
 #include <unistd.h>
 #include <sys/param.h>
-#include <stdlib.h> 
+#include <stdlib.h>
 #include <time.h>
 #include <iostream>
 
@@ -99,7 +99,7 @@ public:
     bool noBorder;
     bool fullScreen;
 
-};    
+};
 
 MainWindow::MainWindow( Qt::WindowFlags wflags )
   : QMainWindow( 0, wflags )
@@ -118,7 +118,7 @@ MainWindow::MainWindow( Qt::WindowFlags wflags )
     KCategoryDrawer * drawer = new KCategoryDrawer;
 
     layout->addWidget(d->modview);
-    
+
     d->modview->setSelectionMode(QAbstractItemView::SingleSelection);
 //        tv->setSpacing(KDialog::spacingHint());
     d->modview->setCategoryDrawer( drawer );
@@ -136,7 +136,7 @@ MainWindow::MainWindow( Qt::WindowFlags wflags )
     //kcsfpm->setFilterRole( KCModuleModel::UserFilterRole );
     //kcsfpm->setFilterCaseSensitivity( Qt::CaseInsensitive );
     d->kcsfpm->sort( 0 );
-    d->modview->setModel( d->kcsfpm ); 
+    d->modview->setModel( d->kcsfpm );
 
     // Setup Dock Widget with groups and search field
     QDockWidget *groupdock = new QDockWidget(this);
@@ -152,11 +152,11 @@ MainWindow::MainWindow( Qt::WindowFlags wflags )
     searchLayout->addWidget(searchLabel);
     searchLayout->addWidget(d->searchField);
 
-    leftPanelLayout->addLayout( searchLayout );    
+    leftPanelLayout->addLayout( searchLayout );
 
     d->gcsfpm = new QSortFilterProxyModel( this );
     d->gcsfpm->setSourceModel( d->modmodel->groupsModel() );
-    d->gcsfpm->setFilterKeyColumn( 2 );
+    d->gcsfpm->setFilterKeyColumn( 3 );
     d->gcsfpm->setFilterRole( Qt::UserRole );
 
     d->groupview = new ListView(  );
@@ -172,10 +172,39 @@ MainWindow::MainWindow( Qt::WindowFlags wflags )
     d->modview->selectCategory( d->modmodel->groupsModel()->data(selection).toString() );
 
     leftPanelLayout->addWidget( d->groupview );
-    
+
     groupdock->setWidget( leftPanel );
 
     addDockWidget(Qt::LeftDockWidgetArea, groupdock);
+
+    // Setup Dock Widget with system information
+    QString product_name = getAnsibleValue("ansible_product_name");
+
+    // read group desktop files
+    QString filename = "/etc/xdg/kcm-about-distrorc";
+    QSettings kcmAboutDistroFile( filename, QSettings::IniFormat );
+    // check if parsing was correct
+
+    if ( kcmAboutDistroFile.status() != QSettings::NoError )
+    {
+        qWarning() << "Error reading desktop file " << filename;
+        std::cout << qPrintable("This file doesn't exist" + filename) << std::endl;
+    }
+    //kcmAboutDistroFile.beginGroup( "General" );
+    QString logoPath = kcmAboutDistroFile.value("LogoPath", "").toString();
+    QString webSite = kcmAboutDistroFile.value("Website", "").toString();
+
+    QDockWidget *sysinfodock = new QDockWidget(this);
+    sysinfodock->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
+    QWidget *rightPanel = new QWidget( this );
+    QVBoxLayout *rightPanelLayout = new QVBoxLayout( rightPanel );
+    QHBoxLayout *systemLayout = new QHBoxLayout();
+    QLabel *systemLabel = new QLabel();
+    systemLabel->setText("Board Name: " + product_name);
+    systemLayout->addWidget(systemLabel);
+    rightPanelLayout->addLayout(systemLayout);
+    sysinfodock->setWidget( rightPanel );
+    addDockWidget(Qt::RightDockWidgetArea, sysinfodock);
 
     readSettings();
 
@@ -187,18 +216,12 @@ MainWindow::MainWindow( Qt::WindowFlags wflags )
 
     logSaver = new YQSaveLogs();
 
-    QStringList arguments;
-    arguments << "localhost" << "-m" << "setup";
-    QString program_stdout = runAnsible(arguments);
-    QJsonObject hostname_object = parseAnsible(program_stdout);
-    QString hostname_value = hostname_object["ansible_hostname"].toString();
-    setWinTitle(hostname_value);
-    //statusBar()->showMessage( _("Ready") );
-    QJsonArray cpu = hostname_object["ansible_processor"].toArray();
-    statusBar()->showMessage(cpu[2].toString());
+
+    setWinTitle();
+    statusBar()->showMessage( _("Ready") );
 
 
-    
+
     connect( d->groupview, SIGNAL( clicked( const QModelIndex & ) ),
              SLOT( slotGroupPressed( const QModelIndex & ) ) );
 
@@ -215,7 +238,7 @@ MainWindow::MainWindow( Qt::WindowFlags wflags )
 
     connect( saveLogs, &QAction::triggered, logSaver, &YQSaveLogs::save );
 
-    connect( logSaver, SIGNAL( statusMsg( const QString &)), statusBar(), 
+    connect( logSaver, SIGNAL( statusMsg( const QString &)), statusBar(),
 	     SLOT( showMessage( const QString &) ));
 
 
@@ -234,12 +257,12 @@ void MainWindow::setNoBorder( bool nb )
 
 void MainWindow::initActions()
 {
-   //addToF = new QAction( "Add to Favourites", this ); 
+   //addToF = new QAction( "Add to Favourites", this );
    shutdown = new QAction( this );
-   shutdown->setShortcut( Qt::CTRL + Qt::Key_Q ); 
+   shutdown->setShortcut( Qt::CTRL + Qt::Key_Q );
 
    saveLogs = new QAction( this );
-   saveLogs->setShortcut( Qt::SHIFT + Qt::Key_F8); 
+   saveLogs->setShortcut( Qt::SHIFT + Qt::Key_F8);
 }
 
 void MainWindow::slotGroupPressed( const QModelIndex &index )
@@ -262,7 +285,7 @@ void MainWindow::slotModulePressed( const QModelIndex &index )
     QModelIndex srcidx = d->kcsfpm->mapToSource(index);
     if ( ! srcidx.isValid() )
         return;
-    
+
     qDebug() << "Module Click:" << d->modmodel->data(srcidx).toString();
     qDebug() << "-> " << srcidx.row() << " : " << d->modmodel->propertyValue(srcidx, "GenericName").toString();
 }
@@ -303,7 +326,7 @@ void MainWindow::slotLaunchModule( const QModelIndex &index)
     QString cmd = QString("/sbin/yast2 ");
     cmd += client;
 
-    if ( d->noBorder )	
+    if ( d->noBorder )
         cmd += " --noborder ";
     if ( d->fullScreen )
         cmd += " --fullscreen ";
@@ -317,7 +340,7 @@ void MainWindow::slotLaunchModule( const QModelIndex &index)
     cmd += " &";
 
     //FIXME: use something more intelligent (unique) to remember used modules, names suck
-    d->recentlyUsed.enqueue( name );  
+    d->recentlyUsed.enqueue( name );
     if( d->recentlyUsed.size() == USED_QUEUE_SIZE )
     {
 	d->recentlyUsed.dequeue();
@@ -333,7 +356,7 @@ void MainWindow::slotLaunchModule( const QModelIndex &index)
 
     system( cmd.toUtf8() );
 
-    QTimer::singleShot( 3*1000, this, SLOT( slotRestoreCursor() ) ); 
+    QTimer::singleShot( 3*1000, this, SLOT( slotRestoreCursor() ) );
 }
 
 void MainWindow::slotFilterChanged()
@@ -348,7 +371,7 @@ void MainWindow::slotFilterChanged()
 void MainWindow::initialMsg()
 {
     if ( !d->modmodel->isRoot() )
-	QMessageBox::information(this, _("YaST Control Center"), 
+	QMessageBox::information(this, _("YaST Control Center"),
             _("YaST Control Center is not running as root.\n"
 	    "You will only see modules which do not require root privileges."));
 }
@@ -361,9 +384,9 @@ void MainWindow::slotRestoreCursor()
 void MainWindow::readSettings()
 {
     QSettings settings(ORG_NAME, APP_NAME);
-    
+
     settings.beginGroup("MainWindow");
-    resize(settings.value("Size", QSize(680,420)).toSize()); 
+    resize(settings.value("Size", QSize(680,420)).toSize());
     move(settings.value("Position", QPoint(200,200)).toPoint());
     settings.endGroup();
 
@@ -382,26 +405,26 @@ QSize MainWindow::readGroupViewSize()
 {
     QSettings settings(ORG_NAME, APP_NAME);
     QSize size;
-    
+
     settings.beginGroup("GroupView");
-    size = settings.value("Size", GROUPSIZE).toSize(); 
+    size = settings.value("Size", GROUPSIZE).toSize();
     settings.endGroup();
 
     return size;
 }
 
 
-void MainWindow::writeSettings() 
+void MainWindow::writeSettings()
 {
     QSettings settings(ORG_NAME, APP_NAME);
-     
+
     settings.beginGroup("MainWindow");
-    settings.setValue("Size", size()); 
+    settings.setValue("Size", size());
     settings.setValue("Position", pos());
     settings.endGroup();
 
-    settings.beginGroup( "PersonalItems" ); 
-    QStringList used_list( d->recentlyUsed ); 
+    settings.beginGroup( "PersonalItems" );
+    QStringList used_list( d->recentlyUsed );
     settings.setValue( "RecentlyUsed", used_list.join(",") );
     settings.endGroup();
 
@@ -410,14 +433,42 @@ void MainWindow::writeSettings()
     settings.endGroup();
 
 }
+void MainWindow::setWinTitle()
+{
+    QString title = _("YaST Control Center");
+    char hostname[ MAXHOSTNAMELEN+1 ];
+    if ( gethostname( hostname, sizeof( hostname )-1 ) == 0 )
+    {
+    hostname[ sizeof( hostname ) -1 ] = '\0'; // make sure it's terminated
 
-void MainWindow::setWinTitle(QString hostname_value)
+    if ( strlen( hostname ) > 0 && strcmp( hostname, "(none)" ) != 0 )
+    {
+        title += " @ ";
+        title += hostname;
+    }
+    }
+    setWindowTitle( title );
+    QCoreApplication::setApplicationName( title );
+}
+
+/*void MainWindow::setWinTitle(QString hostname_value)
 {
     QString title = _("YaST Control Center");
     char hostname[ MAXHOSTNAMELEN+1 ];
     title += " @ " + hostname_value;
     setWindowTitle( title );
     QCoreApplication::setApplicationName( title );
+}
+*/
+
+QString MainWindow::getAnsibleValue(QString key)
+{
+    QStringList arguments;
+    arguments << "localhost" << "-m" << "setup";
+    QString program_stdout = runAnsible(arguments);
+    QJsonObject ansible_object = parseAnsible(program_stdout);
+    QString ansible_value = ansible_object[key].toString();
+    return ansible_value;
 }
 
 QString MainWindow::runAnsible(QStringList arguments)
@@ -450,7 +501,7 @@ QJsonObject MainWindow::parseAnsible(QString json_text)
 void MainWindow::closeEvent (QCloseEvent *event)
 {
     writeSettings();
-    event->accept(); 
+    event->accept();
 }
 
 MainWindow::~MainWindow()
