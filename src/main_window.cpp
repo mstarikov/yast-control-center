@@ -59,6 +59,7 @@
 
 #define GROUPSIZE QSize(200,350)
 
+QJsonObject ansible_object;
 
 /*
   Textdomain "control-center"
@@ -178,31 +179,132 @@ MainWindow::MainWindow( Qt::WindowFlags wflags )
     addDockWidget(Qt::LeftDockWidgetArea, groupdock);
 
     // Setup Dock Widget with system information
-    QString product_name = getAnsibleValue("ansible_product_name");
+    QStringList arguments;
+    arguments << "localhost" << "-m" << "setup";
+    QString program_stdout = runAnsible(arguments);
+    ansible_object = parseAnsible(program_stdout);
 
-    // read group desktop files
-    QString filename = "/etc/xdg/kcm-about-distrorc";
-    QSettings kcmAboutDistroFile( filename, QSettings::IniFormat );
-    // check if parsing was correct
 
-    if ( kcmAboutDistroFile.status() != QSettings::NoError )
+    QString distribution = ansible_object["ansible_distribution"].toString();
+    QString distribution_version = ansible_object["ansible_distribution_version"].toString();
+    const QString distroNameVersion = QStringLiteral("%1 %2").arg(distribution, distribution_version);
+
+    QString product_name = ansible_object["ansible_product_name"].toString();
+    if (product_name.compare("To be filled by O.E.M.") == 0)
     {
-        qWarning() << "Error reading desktop file " << filename;
-        std::cout << qPrintable("This file doesn't exist" + filename) << std::endl;
+        product_name = ansible_object["ansible_board_name"].toString();
     }
-    //kcmAboutDistroFile.beginGroup( "General" );
-    QString logoPath = kcmAboutDistroFile.value("LogoPath", "").toString();
-    QString webSite = kcmAboutDistroFile.value("Website", "").toString();
+    QString architecture = ansible_object["ansible_architecture"].toString();
+    QString bios_date = ansible_object["ansible_bios_date"].toString();
+    QString bios_version = ansible_object["ansible_bios_version"].toString();
+    QJsonObject default_nic_object = ansible_object["ansible_default_ipv4"].toObject();
+    /* Example of default IP4 output from ansible:
+    "ansible_default_ipv4": {
+            "address": "192.168.1.171",
+            "alias": "br0",
+            "broadcast": "192.168.1.255",
+            "gateway": "192.168.1.1",
+            "interface": "br0",
+            "macaddress": "90:2b:34:03:75:62",
+            "mtu": 1500,
+            "netmask": "255.255.255.0",
+            "network": "192.168.1.0",
+            "type": "bridge"
+        },
+     */
+
+    QJsonObject default_dns_object = ansible_object["ansible_dns"].toObject();
+    /* Example of dns output from ansible
+        "ansible_dns": {
+            "nameservers": [
+                "192.168.1.254",
+                "8.8.8.8"
+            ],
+            "search": [
+                "bunker.home"
+            ]
+        }
+     */
+
+    QString default_nic = "hostname: " +  ansible_object["ansible_hostname"].toString() + "\n" +
+                          "address: " + default_nic_object["address"].toString() + "\n" +
+                          "interface: " + default_nic_object["interface"].toString() + "\n" +
+                          "gateway: " + default_nic_object["gateway"].toString() + "\n" +
+                          "MAC: " + default_nic_object["macaddress"].toString() + "\n" +
+                          "netmask: " + default_nic_object["netmask"].toString() + "\n" +
+                          QStringLiteral("MTU: %1").arg(default_nic_object["mtu"].toInt()) + "\n";
+
+    //std::cout << qPrintable() << std::endl;
+    QString dns_servers = "";
+    foreach(QJsonValue i, default_dns_object["nameservers"].toArray())
+    {
+        dns_servers.append(i.toString() + ", ");
+    }
+    QString domains = "";
+    foreach(QJsonValue i, default_dns_object["search"].toArray())
+    {
+        domains.append(i.toString() + ", ");
+    }
+    QString default_dns = "DNS: " + dns_servers + "\n" +
+                          "Domain: " + domains;
+    // read group desktop files
+    QStringList single_command_args;
+    single_command_args << "localhost" << "-m" << "command" << "-a" << "cat /etc/xdg/kcm-about-distrorc";
+    QString about_distrorc = runAnsible(single_command_args);
+    QString logoPath = "";
+    QString webSite = "";
+    if ( about_distrorc.contains("rc=0") )
+    {
+        QStringList kde_distrorc = about_distrorc.split("\n");
+        logoPath = kde_distrorc[kde_distrorc.indexOf(QRegExp("^LogoPath=.*$"))].split("=")[1];
+        webSite = kde_distrorc[kde_distrorc.indexOf(QRegExp("^Website=.*$"))].split("=")[1];
+    }
+
+    //std::cout << qPrintable(logoPath) << std::endl;
 
     QDockWidget *sysinfodock = new QDockWidget(this);
     sysinfodock->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
     QWidget *rightPanel = new QWidget( this );
     QVBoxLayout *rightPanelLayout = new QVBoxLayout( rightPanel );
-    QHBoxLayout *systemLayout = new QHBoxLayout();
+    QVBoxLayout *systemLayout = new QVBoxLayout();
+    // from https://github.com/KDE/kinfocenter/blob/master/Modules/about-distro/src/Module.cpp
+    QPixmap logo;
+    logo = QPixmap(logoPath);
+    QLabel *logoLabel = new QLabel();
+    logoLabel->setPixmap(logo);
+    logoLabel->setAlignment(Qt::AlignCenter);
+    QLabel *nameVersionLabel = new QLabel();
+
+    QFont font;
+    font.setPixelSize(24);
+    font.setBold(true);
+    nameVersionLabel->setFont(font);
+    nameVersionLabel->setText(distroNameVersion);
+
+
+
+    QLabel *urlLabel = new QLabel();
+    urlLabel->setText("Distro Site: <a href='" + webSite + "'>" + webSite + "</a>");
+    urlLabel->setOpenExternalLinks(true);
+
     QLabel *systemLabel = new QLabel();
-    systemLabel->setText("Board Name: " + product_name);
+    systemLabel->setText("Board Name: " + product_name + "\n" +
+                         "Bios Date: " + bios_date + "\n" +
+                         "Bios version: " + bios_version);
+    QLabel *networkLabel = new QLabel();
+    networkLabel->setText("Default Network Setting:\n" + default_nic + "\n" + default_dns);
+
+
+
+    systemLayout->addWidget(nameVersionLabel);
+    systemLayout->addWidget(urlLabel);
     systemLayout->addWidget(systemLabel);
+    systemLayout->addWidget(networkLabel);
+
+    rightPanelLayout->addWidget(logoLabel);
     rightPanelLayout->addLayout(systemLayout);
+    rightPanelLayout->setAlignment(Qt::AlignVCenter);
+
     sysinfodock->setWidget( rightPanel );
     addDockWidget(Qt::RightDockWidgetArea, sysinfodock);
 
@@ -433,7 +535,7 @@ void MainWindow::writeSettings()
     settings.endGroup();
 
 }
-void MainWindow::setWinTitle()
+/*void MainWindow::setWinTitle()
 {
     QString title = _("YaST Control Center");
     char hostname[ MAXHOSTNAMELEN+1 ];
@@ -450,30 +552,18 @@ void MainWindow::setWinTitle()
     setWindowTitle( title );
     QCoreApplication::setApplicationName( title );
 }
-
-/*void MainWindow::setWinTitle(QString hostname_value)
+*/
+void MainWindow::setWinTitle()
 {
     QString title = _("YaST Control Center");
-    char hostname[ MAXHOSTNAMELEN+1 ];
-    title += " @ " + hostname_value;
+    title += " @ " + ansible_object["ansible_hostname"].toString();
     setWindowTitle( title );
     QCoreApplication::setApplicationName( title );
-}
-*/
-
-QString MainWindow::getAnsibleValue(QString key)
-{
-    QStringList arguments;
-    arguments << "localhost" << "-m" << "setup";
-    QString program_stdout = runAnsible(arguments);
-    QJsonObject ansible_object = parseAnsible(program_stdout);
-    QString ansible_value = ansible_object[key].toString();
-    return ansible_value;
 }
 
 QString MainWindow::runAnsible(QStringList arguments)
 {
-    //Prepare ansible Ad-Hoc command
+    //TODO: find ansible command
     QString program = "/usr/bin/ansible";
     //Run ansible Ad-Hoc command and store output
     QProcess runAnsible;
@@ -481,6 +571,7 @@ QString MainWindow::runAnsible(QStringList arguments)
     runAnsible.waitForFinished();
     //read result and trim top line(non JSON)
     QString program_stdout = runAnsible.readAll();
+    //TODO check if command is successful.
     return program_stdout.remove("localhost | SUCCESS =>");
 }
 

@@ -333,18 +333,18 @@ QVariant YQDesktopFilesModel::data( const QModelIndex &index, int role ) const
         {
         case Name:
             return propertyValue( index, "Name" );
-	case GenericName:
-	    return propertyValue ( index, "GenericName" );
+        case GenericName:
+            return propertyValue ( index, "GenericName" );
         case Group:
             return propertyValue( index, "X-SuSE-YaST-Group" );
         case Icon:
             return propertyValue( index, "Icon" );
         case SortKey:
             return propertyValue( index, "X-SuSE-YaST-SortKey" );
-	case Call:
-	    return propertyValue ( index, "X-SuSE-YaST-Call" );
-	case Argument:
-	    return propertyValue ( index, "X-SuSE-YaST-Argument" );
+        case Call:
+            return propertyValue ( index, "X-SuSE-YaST-Call" );
+        case Argument:
+            return propertyValue ( index, "X-SuSE-YaST-Argument" );
         default:
             return QVariant();
         }                

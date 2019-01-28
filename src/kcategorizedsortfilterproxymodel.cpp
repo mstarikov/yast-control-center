@@ -106,7 +106,7 @@ int KCategorizedSortFilterProxyModel::naturalCompare(const QString &a,
     // and compares these pieces of a and b to each other
     // (first with first, second with second, ...).
     //
-    // This is based on the natural sort order code code by Martin Pool
+    // This is based on the natural sort order code by Martin Pool
     // http://sourcefrog.net/projects/natsort/
     // Martin Pool agreed to license this under LGPL or GPL.
 
